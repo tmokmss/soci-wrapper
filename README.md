@@ -1,7 +1,7 @@
 # soci-wrapper
 Build and push a SOCI index in an alternative way.
 
-* You don't neet any other dependencies (such as containerd or zlib) installed.
+* You do not need any other dependencies (such as containerd or zlib) installed.
 * You can run this binary anywhere such as CodeBuild or Lambda.
 
 This CLI is used in [`deploy-time-build`](https://github.com/tmokmss/deploy-time-build?tab=readme-ov-file#build-soci-index-for-a-container-image), a CDK construct to build and deploy a SOCI index on CDK deployment.
