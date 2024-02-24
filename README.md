@@ -7,13 +7,13 @@ Build and push a SOCI index in an alternative way.
 This CLI is used in [`deploy-time-build`](https://github.com/tmokmss/deploy-time-build?tab=readme-ov-file#build-soci-index-for-a-container-image), a CDK construct to build and deploy a SOCI index on CDK deployment.
 
 ## Usage
-It can only be built on Linux environment. 
+Pass 4 arguments to the CLI as below:
 
 ```sh
-soci-wrapper REPOSITORY_NAME DIGEST AWS_REGION AWS_ACCOUNT
+soci-wrapper REPOSITORY_NAME IMAGE_DIGEST AWS_REGION AWS_ACCOUNT
 ```
 
-Sometimes you will also have to set `AWS_REGION` environment variable:
+Sometimes (depending on AWS credential configuration) you will also have to set `AWS_REGION` environment variable:
 
 ```sh
 export AWS_REGION=us-west-2 # the region your ECR repository is located at
