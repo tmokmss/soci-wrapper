@@ -4,12 +4,12 @@ go 1.22
 
 require (
 	github.com/aws/aws-sdk-go v1.50.18
-	github.com/awslabs/soci-snapshotter v0.5.0
+	github.com/awslabs/soci-snapshotter v0.4.1
 	github.com/containerd/containerd v1.7.13
 	github.com/opencontainers/image-spec v1.1.0-rc6
 	github.com/rs/zerolog v1.32.0
 	golang.org/x/sys v0.17.0
-	oras.land/oras-go/v2 v2.4.0
+	oras.land/oras-go/v2 v2.2.1
 )
 
 require (
