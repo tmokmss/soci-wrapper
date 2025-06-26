@@ -86,10 +86,10 @@ func initSociArtifactsDb(dataDir string) (*soci.ArtifactsDb, error) {
 	return artifactsDb, nil
 }
 
-// Build soci index for an aimage and returns its ocispec.Descriptor
-func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore, image images.Image) (*ocispec.Descriptor, error) {
-	log.Info(ctx, "Building SOCI index")
-	platform := platforms.DefaultSpec() // TODO: make this a user option
+// Build soci index for an image and returns its ocispec.Descriptor
+func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore, image images.Image, sociIndexVersion string) (*ocispec.Descriptor, error) {
+	log.Info(ctx, fmt.Sprintf("Building SOCI index version %s", sociIndexVersion))
+	platform := platforms.DefaultSpec()
 
 	artifactsDb, err := initSociArtifactsDb(dataDir)
 	if err != nil {
@@ -101,31 +101,32 @@ func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore,
 		return nil, err
 	}
 
-	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, artifactsDb, soci.WithMinLayerSize(0), soci.WithPlatform(platform))
+	// NOTE: v0.9.0の新しいAPI形式に合わせる
+	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, artifactsDb,
+		soci.WithMinLayerSize(0),
+		soci.WithPlatform(platform))
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the SOCI index
-	index, err := builder.Build(ctx, image)
-	if err != nil {
-		return nil, err
+	// Build the SOCI index (v0.9.0ではV1のみサポート)
+	// V2サポートは最新のコードにのみ存在するため、V2リクエストでもV1で処理
+	if sociIndexVersion == "V2" {
+		log.Info(ctx, "Warning: SOCI V2 index not supported in this version. Using V1 format.")
 	}
-
-	// Write the SOCI index to the OCI store
-	err = soci.WriteSociIndex(ctx, index, sociStore, artifactsDb)
+	
+	_, err = builder.Build(ctx, image)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to build SOCI index: %w", err)
 	}
-
+	
 	// Get SOCI indices for the image from the OCI store
-	// TODO: consider making soci's WriteSociIndex to return the descriptor directly
 	indexDescriptorInfos, _, err := soci.GetIndexDescriptorCollection(ctx, containerdStore, artifactsDb, image, []ocispec.Platform{platform})
 	if err != nil {
 		return nil, err
 	}
 	if len(indexDescriptorInfos) == 0 {
-		return nil, errors.New("No SOCI indices found in OCI store")
+		return nil, errors.New("no SOCI indices found in OCI store")
 	}
 	sort.Slice(indexDescriptorInfos, func(i, j int) bool {
 		return indexDescriptorInfos[i].CreatedAt.Before(indexDescriptorInfos[j].CreatedAt)
@@ -140,7 +141,7 @@ func lambdaError(ctx context.Context, msg string, err error) (string, error) {
 	return msg, err
 }
 
-func process(ctx context.Context, repo string, digest string, region string, account string) (string, error) {
+func process(ctx context.Context, repo string, digest string, region string, account string, sociIndexVersion string, imageTag string) (string, error) {
 	registryUrl := buildEcrRegistryUrl(region, account)
 	ctx = context.WithValue(ctx, "RegistryURL", registryUrl)
 
@@ -149,9 +150,9 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 		return lambdaError(ctx, "Remote registry initialization error", err)
 	}
 
-	err = registry.ValidateImageManifest(ctx, repo, digest)
+	err = registry.ValidateImageDigest(ctx, repo, digest, sociIndexVersion)
 	if err != nil {
-		log.Warn(ctx, fmt.Sprintf("Image manifest validation error: %v", err))
+		log.Warn(ctx, fmt.Sprintf("Image validation error: %v", err))
 		// Returning a non error to skip retries
 		return "Exited early due to manifest validation error", nil
 	}
@@ -179,13 +180,20 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 		Target: *desc,
 	}
 
-	indexDescriptor, err := buildIndex(ctx, dataDir, sociStore, image)
+	// For V2, prepare tag for the SOCI index
+	var tag string
+	if sociIndexVersion == "V2" && imageTag != "" {
+		tag = imageTag + "-soci"
+		log.Info(ctx, fmt.Sprintf("Using image tag with suffix: %s", tag))
+	}
+
+	indexDescriptor, err := buildIndex(ctx, dataDir, sociStore, image, sociIndexVersion)
 	if err != nil {
 		return lambdaError(ctx, "SOCI index build error", err)
 	}
 	ctx = context.WithValue(ctx, "SOCIIndexDigest", indexDescriptor.Digest.String())
 
-	err = registry.Push(ctx, sociStore, *indexDescriptor, repo)
+	err = registry.Push(ctx, sociStore, *indexDescriptor, repo, tag)
 	if err != nil {
 		return lambdaError(ctx, "SOCI index push error", err)
 	}
@@ -196,12 +204,38 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 
 func main() {
 	if len(os.Args) < 4 {
-		fmt.Println("Usage: soci-wrapper REPOSITORY_NAME IMAGE_DIGEST AWS_REGION AWS_ACCOUNT")
+		fmt.Println("Usage: soci-wrapper REPOSITORY_NAME IMAGE_DIGEST AWS_REGION AWS_ACCOUNT [SOCI_INDEX_VERSION] [IMAGE_TAG]")
+		fmt.Println("  SOCI_INDEX_VERSION: V1 or V2 (default: V1)")
+		fmt.Println("  IMAGE_TAG: Optional image tag (required for V2 SOCI index)")
 		os.Exit(1)
 	}
+	
 	repo := os.Args[1]
 	digest := os.Args[2]
 	region := os.Args[3]
 	account := os.Args[4]
-	process(context.TODO(), repo, digest, region, account)
+	
+	// Default to V1 if not specified
+	sociIndexVersion := "V1"
+	if len(os.Args) >= 6 {
+		sociIndexVersion = os.Args[5]
+		if sociIndexVersion != "V1" && sociIndexVersion != "V2" {
+			fmt.Println("Invalid SOCI index version. Must be 'V1' or 'V2'")
+			os.Exit(1)
+		}
+	}
+	
+	// Get image tag if provided
+	imageTag := ""
+	if len(os.Args) >= 7 {
+		imageTag = os.Args[6]
+	}
+	
+	// For V2, the image tag is required
+	if sociIndexVersion == "V2" && imageTag == "" {
+		fmt.Println("IMAGE_TAG is required when using SOCI index version V2")
+		os.Exit(1)
+	}
+	
+	process(context.TODO(), repo, digest, region, account, sociIndexVersion, imageTag)
 }
