@@ -101,10 +101,8 @@ func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore,
 		return nil, err
 	}
 
-	// NOTE: v0.9.0の新しいAPI形式に合わせる
-	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, artifactsDb,
-		soci.WithMinLayerSize(0),
-		soci.WithPlatform(platform))
+	// ソースコードからAPIを確認して、正確な引数で呼び出す
+	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, soci.WithArtifactsDb(artifactsDb), soci.WithMinLayerSize(0))
 	if err != nil {
 		return nil, err
 	}
