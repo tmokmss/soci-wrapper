@@ -147,7 +147,7 @@ func lambdaError(ctx context.Context, msg string, err error) (string, error) {
 	return msg, err
 }
 
-func process(ctx context.Context, repo string, digest string, region string, account string, sociIndexVersion string, imageTag string) (string, error) {
+func process(ctx context.Context, repo string, digest string, region string, account string, sociIndexVersion string, outputTag string) (string, error) {
 	registryUrl := buildEcrRegistryUrl(region, account)
 	ctx = context.WithValue(ctx, "RegistryURL", registryUrl)
 
@@ -186,11 +186,11 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 		Target: *desc,
 	}
 
-	// For V2, prepare tag for the SOCI index
+	// For V2, use outputTag directly for the SOCI index
 	var tag string
-	if sociIndexVersion == "V2" && imageTag != "" {
-		tag = imageTag + "-soci"
-		log.Info(ctx, fmt.Sprintf("Using image tag with suffix: %s", tag))
+	if sociIndexVersion == "V2" && outputTag != "" {
+		tag = outputTag
+		log.Info(ctx, fmt.Sprintf("Using output tag: %s", tag))
 	}
 
 	indexDescriptor, err := buildIndex(ctx, dataDir, sociStore, image, sociIndexVersion)
@@ -215,11 +215,11 @@ func main() {
 	regionPtr := flag.String("region", "", "AWS region (required)")
 	accountPtr := flag.String("account", "", "AWS account ID (required)")
 	sociIndexVersionPtr := flag.String("soci-version", "V1", "SOCI index version (V1 or V2, default: V1)")
-	imageTagPtr := flag.String("tag", "", "Image tag (required for V2 SOCI index)")
+	outputTagPtr := flag.String("output-tag", "", "Output tag for SOCI index (required for V2 SOCI index)")
 	
 	// Define custom usage message
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT [--soci-version SOCI_INDEX_VERSION] [--tag IMAGE_TAG]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT [--soci-version SOCI_INDEX_VERSION] [--output-tag OUTPUT_TAG]\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
@@ -240,12 +240,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// For V2, the image tag is required
-	if *sociIndexVersionPtr == "V2" && *imageTagPtr == "" {
-		fmt.Println("Error: --tag is required when using SOCI index version V2")
+	// For V2, the output tag is required
+	if *sociIndexVersionPtr == "V2" && *outputTagPtr == "" {
+		fmt.Println("Error: --output-tag is required when using SOCI index version V2")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	process(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr, *sociIndexVersionPtr, *imageTagPtr)
+	process(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr, *sociIndexVersionPtr, *outputTagPtr)
 }
