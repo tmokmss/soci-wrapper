@@ -87,10 +87,10 @@ func initSociArtifactsDb(dataDir string) (*soci.ArtifactsDb, error) {
 	return artifactsDb, nil
 }
 
-// Build soci index for an aimage and returns its ocispec.Descriptor
-func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore, image images.Image) (*ocispec.Descriptor, error) {
-	log.Info(ctx, "Building SOCI index")
-	platform := platforms.DefaultSpec() // TODO: make this a user option
+// Build soci index for an image and returns its ocispec.Descriptor
+func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore, image images.Image, sociIndexVersion string) (*ocispec.Descriptor, error) {
+	log.Info(ctx, fmt.Sprintf("Building SOCI index version %s", sociIndexVersion))
+	platform := platforms.DefaultSpec()
 
 	artifactsDb, err := initSociArtifactsDb(dataDir)
 	if err != nil {
@@ -102,37 +102,43 @@ func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore,
 		return nil, err
 	}
 
-	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, artifactsDb, soci.WithMinLayerSize(0), soci.WithPlatform(platform))
+	// ソースコードからAPIを確認して、正確な引数で呼び出す
+	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, soci.WithArtifactsDb(artifactsDb), soci.WithMinLayerSize(0))
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the SOCI index
-	index, err := builder.Build(ctx, image)
-	if err != nil {
-		return nil, err
-	}
+	// SOCIインデックスバージョンに応じて処理を分岐
+	if sociIndexVersion == "V2" {
+		log.Info(ctx, "Building SOCI V2 index using Convert method")
+		// V2ではConvert()を使用
+		indexDescriptor, err := builder.Convert(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert image to SOCI V2 index: %w", err)
+		}
+		return indexDescriptor, nil
+	} else {
+		// デフォルトはV1
+		log.Info(ctx, "Building SOCI V1 index using Build method")
+		_, err = builder.Build(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build SOCI V1 index: %w", err)
+		}
 
-	// Write the SOCI index to the OCI store
-	err = soci.WriteSociIndex(ctx, index, sociStore, artifactsDb)
-	if err != nil {
-		return nil, err
-	}
+		// Get SOCI indices for the image from the OCI store
+		indexDescriptorInfos, _, err := soci.GetIndexDescriptorCollection(ctx, containerdStore, artifactsDb, image, []ocispec.Platform{platform})
+		if err != nil {
+			return nil, err
+		}
+		if len(indexDescriptorInfos) == 0 {
+			return nil, errors.New("no SOCI indices found in OCI store")
+		}
+		sort.Slice(indexDescriptorInfos, func(i, j int) bool {
+			return indexDescriptorInfos[i].CreatedAt.Before(indexDescriptorInfos[j].CreatedAt)
+		})
 
-	// Get SOCI indices for the image from the OCI store
-	// TODO: consider making soci's WriteSociIndex to return the descriptor directly
-	indexDescriptorInfos, _, err := soci.GetIndexDescriptorCollection(ctx, containerdStore, artifactsDb, image, []ocispec.Platform{platform})
-	if err != nil {
-		return nil, err
+		return &indexDescriptorInfos[len(indexDescriptorInfos)-1].Descriptor, nil
 	}
-	if len(indexDescriptorInfos) == 0 {
-		return nil, errors.New("No SOCI indices found in OCI store")
-	}
-	sort.Slice(indexDescriptorInfos, func(i, j int) bool {
-		return indexDescriptorInfos[i].CreatedAt.Before(indexDescriptorInfos[j].CreatedAt)
-	})
-
-	return &indexDescriptorInfos[len(indexDescriptorInfos)-1].Descriptor, nil
 }
 
 // Log and return the lambda handler error
@@ -141,7 +147,7 @@ func lambdaError(ctx context.Context, msg string, err error) (string, error) {
 	return msg, err
 }
 
-func process(ctx context.Context, repo string, digest string, region string, account string) (string, error) {
+func process(ctx context.Context, repo string, digest string, region string, account string, sociIndexVersion string, imageTag string) (string, error) {
 	registryUrl := buildEcrRegistryUrl(region, account)
 	ctx = context.WithValue(ctx, "RegistryURL", registryUrl)
 
@@ -150,9 +156,9 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 		return lambdaError(ctx, "Remote registry initialization error", err)
 	}
 
-	err = registry.ValidateImageManifest(ctx, repo, digest)
+	err = registry.ValidateImageDigest(ctx, repo, digest, sociIndexVersion)
 	if err != nil {
-		log.Warn(ctx, fmt.Sprintf("Image manifest validation error: %v", err))
+		log.Warn(ctx, fmt.Sprintf("Image validation error: %v", err))
 		// Returning a non error to skip retries
 		return "Exited early due to manifest validation error", nil
 	}
@@ -180,13 +186,20 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 		Target: *desc,
 	}
 
-	indexDescriptor, err := buildIndex(ctx, dataDir, sociStore, image)
+	// For V2, prepare tag for the SOCI index
+	var tag string
+	if sociIndexVersion == "V2" && imageTag != "" {
+		tag = imageTag + "-soci"
+		log.Info(ctx, fmt.Sprintf("Using image tag with suffix: %s", tag))
+	}
+
+	indexDescriptor, err := buildIndex(ctx, dataDir, sociStore, image, sociIndexVersion)
 	if err != nil {
 		return lambdaError(ctx, "SOCI index build error", err)
 	}
 	ctx = context.WithValue(ctx, "SOCIIndexDigest", indexDescriptor.Digest.String())
 
-	err = registry.Push(ctx, sociStore, *indexDescriptor, repo)
+	err = registry.Push(ctx, sociStore, *indexDescriptor, repo, tag)
 	if err != nil {
 		return lambdaError(ctx, "SOCI index push error", err)
 	}
@@ -201,10 +214,12 @@ func main() {
 	digestPtr := flag.String("digest", "", "Image digest (required)")
 	regionPtr := flag.String("region", "", "AWS region (required)")
 	accountPtr := flag.String("account", "", "AWS account ID (required)")
+	sociIndexVersionPtr := flag.String("soci-version", "V1", "SOCI index version (V1 or V2, default: V1)")
+	imageTagPtr := flag.String("tag", "", "Image tag (required for V2 SOCI index)")
 	
 	// Define custom usage message
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT [--soci-version SOCI_INDEX_VERSION] [--tag IMAGE_TAG]\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
@@ -214,10 +229,23 @@ func main() {
 
 	// Validate required flags
 	if *repoPtr == "" || *digestPtr == "" || *regionPtr == "" || *accountPtr == "" {
-		fmt.Println("Error: All arguments are required")
+		fmt.Println("Error: All required arguments must be provided")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	process(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr)
+	// Validate SOCI index version
+	if *sociIndexVersionPtr != "V1" && *sociIndexVersionPtr != "V2" {
+		fmt.Println("Invalid SOCI index version. Must be 'V1' or 'V2'")
+		os.Exit(1)
+	}
+
+	// For V2, the image tag is required
+	if *sociIndexVersionPtr == "V2" && *imageTagPtr == "" {
+		fmt.Println("Error: --tag is required when using SOCI index version V2")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	process(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr, *sociIndexVersionPtr, *imageTagPtr)
 }
