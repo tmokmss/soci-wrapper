@@ -5,7 +5,7 @@ A wrapper for the [SOCI](https://github.com/awslabs/soci-snapshotter) (Seekable 
 ## Usage
 
 ```
-soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT
+soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT [--soci-version SOCI_INDEX_VERSION] [--output-tag OUTPUT_TAG]
 ```
 
 ### Options
@@ -14,6 +14,9 @@ soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --
 - `--digest` - Image digest (required)
 - `--region` - AWS region (required)
 - `--account` - AWS account ID (required)
+- `--soci-version` - SOCI index version (V1 or V2, default: V1)
+- `--output-tag` - Output tag for SOCI index (required for V2 SOCI index and ignored for V1 index.)
+
 Build and push a SOCI index in an alternative way.
 
 * You do not need any other dependencies (such as containerd or zlib) installed.
@@ -21,11 +24,16 @@ Build and push a SOCI index in an alternative way.
 
 This CLI is used in [`deploy-time-build`](https://github.com/tmokmss/deploy-time-build?tab=readme-ov-file#build-soci-index-for-a-container-image), a CDK construct to build and deploy a SOCI index on CDK deployment.
 
-## Usage
-Pass 4 arguments to the CLI as below:
+### Examples
 
+For SOCI V1 index:
 ```sh
-soci-wrapper REPOSITORY_NAME IMAGE_DIGEST AWS_REGION AWS_ACCOUNT
+soci-wrapper --repo my-repo --digest sha256:abc123... --region us-west-2 --account 123456789012
+```
+
+For SOCI V2 index:
+```sh
+soci-wrapper --repo my-repo --digest sha256:abc123... --region us-west-2 --account 123456789012 --soci-version V2 --output-tag my-soci-index
 ```
 
 Sometimes (depending on AWS credential configuration) you will also have to set `AWS_REGION` environment variable:
