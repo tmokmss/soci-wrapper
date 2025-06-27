@@ -151,7 +151,7 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 	registryUrl := buildEcrRegistryUrl(region, account)
 	ctx = context.WithValue(ctx, "RegistryURL", registryUrl)
 
-	registry, err := registryutils.Init(ctx, registryUrl)
+	registry, err := registryutils.Init(ctx, registryUrl, region)
 	if err != nil {
 		return lambdaError(ctx, "Remote registry initialization error", err)
 	}

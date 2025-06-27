@@ -50,14 +50,14 @@ type Registry struct {
 var RegistryNotSupportingOciArtifacts = errors.New("Registry does not support OCI artifacts")
 
 // Initialize a remote registry
-func Init(ctx context.Context, registryUrl string) (*Registry, error) {
+func Init(ctx context.Context, registryUrl string, region string) (*Registry, error) {
 	log.Info(ctx, "Initializing registry client")
 	registry, err := remote.NewRegistry(registryUrl)
 	if err != nil {
 		return nil, err
 	}
 	if isEcrRegistry(registryUrl) {
-		err := authorizeEcr(registry)
+		err := authorizeEcr(registry, region)
 		if err != nil {
 			return nil, err
 		}
@@ -236,15 +236,15 @@ func isEcrRegistry(registryUrl string) bool {
 }
 
 // Authorize ECR registry
-func authorizeEcr(ecrRegistry *remote.Registry) error {
+func authorizeEcr(ecrRegistry *remote.Registry, region string) error {
 	// getting ecr auth token
 	input := &ecr.GetAuthorizationTokenInput{}
 	var ecrClient *ecr.ECR
 	ecrEndpoint := os.Getenv("ECR_ENDPOINT") // set this env var for custom, i.e. non default, aws ecr endpoint
 	if ecrEndpoint != "" {
-		ecrClient = ecr.New(session.New(&aws.Config{Endpoint: aws.String(ecrEndpoint)}))
+		ecrClient = ecr.New(session.New(&aws.Config{Endpoint: aws.String(ecrEndpoint), Region: aws.String(region)}))
 	} else {
-		ecrClient = ecr.New(session.New())
+		ecrClient = ecr.New(session.New(&aws.Config{Region: aws.String(region)}))
 	}
 	getAuthorizationTokenResponse, err := ecrClient.GetAuthorizationToken(input)
 	if err != nil {
