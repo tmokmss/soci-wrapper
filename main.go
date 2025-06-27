@@ -102,23 +102,23 @@ func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore,
 		return nil, err
 	}
 
-	// ソースコードからAPIを確認して、正確な引数で呼び出す
+	// Create index builder with the appropriate arguments based on API requirements
 	builder, err := soci.NewIndexBuilder(containerdStore, sociStore, soci.WithArtifactsDb(artifactsDb), soci.WithMinLayerSize(0))
 	if err != nil {
 		return nil, err
 	}
 
-	// SOCIインデックスバージョンに応じて処理を分岐
+	// Branch processing based on SOCI index version
 	if sociIndexVersion == "V2" {
 		log.Info(ctx, "Building SOCI V2 index using Convert method")
-		// V2ではConvert()を使用
+		// Using Convert() method for V2
 		indexDescriptor, err := builder.Convert(ctx, image)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert image to SOCI V2 index: %w", err)
 		}
 		return indexDescriptor, nil
 	} else {
-		// デフォルトはV1
+		// Default to V1
 		log.Info(ctx, "Building SOCI V1 index using Build method")
 		_, err = builder.Build(ctx, image)
 		if err != nil {
