@@ -107,30 +107,37 @@ func buildIndex(ctx context.Context, dataDir string, sociStore *store.SociStore,
 		return nil, err
 	}
 
-	// Build the SOCI index (v0.9.0ではV1のみサポート)
-	// V2サポートは最新のコードにのみ存在するため、V2リクエストでもV1で処理
+	// SOCIインデックスバージョンに応じて処理を分岐
 	if sociIndexVersion == "V2" {
-		log.Info(ctx, "Warning: SOCI V2 index not supported in this version. Using V1 format.")
-	}
-	
-	_, err = builder.Build(ctx, image)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build SOCI index: %w", err)
-	}
-	
-	// Get SOCI indices for the image from the OCI store
-	indexDescriptorInfos, _, err := soci.GetIndexDescriptorCollection(ctx, containerdStore, artifactsDb, image, []ocispec.Platform{platform})
-	if err != nil {
-		return nil, err
-	}
-	if len(indexDescriptorInfos) == 0 {
-		return nil, errors.New("no SOCI indices found in OCI store")
-	}
-	sort.Slice(indexDescriptorInfos, func(i, j int) bool {
-		return indexDescriptorInfos[i].CreatedAt.Before(indexDescriptorInfos[j].CreatedAt)
-	})
+		log.Info(ctx, "Building SOCI V2 index using Convert method")
+		// V2ではConvert()を使用
+		indexDescriptor, err := builder.Convert(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert image to SOCI V2 index: %w", err)
+		}
+		return indexDescriptor, nil
+	} else {
+		// デフォルトはV1
+		log.Info(ctx, "Building SOCI V1 index using Build method")
+		_, err = builder.Build(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build SOCI V1 index: %w", err)
+		}
 
-	return &indexDescriptorInfos[len(indexDescriptorInfos)-1].Descriptor, nil
+		// Get SOCI indices for the image from the OCI store
+		indexDescriptorInfos, _, err := soci.GetIndexDescriptorCollection(ctx, containerdStore, artifactsDb, image, []ocispec.Platform{platform})
+		if err != nil {
+			return nil, err
+		}
+		if len(indexDescriptorInfos) == 0 {
+			return nil, errors.New("no SOCI indices found in OCI store")
+		}
+		sort.Slice(indexDescriptorInfos, func(i, j int) bool {
+			return indexDescriptorInfos[i].CreatedAt.Before(indexDescriptorInfos[j].CreatedAt)
+		})
+
+		return &indexDescriptorInfos[len(indexDescriptorInfos)-1].Descriptor, nil
+	}
 }
 
 // Log and return the lambda handler error
