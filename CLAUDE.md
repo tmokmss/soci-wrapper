@@ -1,5 +1,7 @@
 # SOCI-Wrapper Repository Overview
 
+> Note: This documentation and all PR descriptions should be written in English to maintain consistency across the project documentation and to ensure accessibility for all contributors.
+
 ## Repository Purpose
 
 SOCI-Wrapper is a command-line tool that provides a wrapper for the [SOCI (Seekable OCI)](https://github.com/awslabs/soci-snapshotter) snapshotter tool. It helps with managing SOCI indices for container images, specifically with ECR repositories.
