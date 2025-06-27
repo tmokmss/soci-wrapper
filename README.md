@@ -1,4 +1,19 @@
 # soci-wrapper
+
+A wrapper for the [SOCI](https://github.com/awslabs/soci-snapshotter) (Seekable OCI) snapshotter tool.
+
+## Usage
+
+```
+soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT
+```
+
+### Options
+
+- `--repo` - Repository name (required)
+- `--digest` - Image digest (required)
+- `--region` - AWS region (required)
+- `--account` - AWS account ID (required)
 Build and push a SOCI index in an alternative way.
 
 * You do not need any other dependencies (such as containerd or zlib) installed.

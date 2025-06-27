@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"sort"
@@ -195,13 +196,28 @@ func process(ctx context.Context, repo string, digest string, region string, acc
 }
 
 func main() {
-	if len(os.Args) < 4 {
-		fmt.Println("Usage: soci-wrapper REPOSITORY_NAME IMAGE_DIGEST AWS_REGION AWS_ACCOUNT")
+	// Define flags for named arguments
+	repoPtr := flag.String("repo", "", "Repository name (required)")
+	digestPtr := flag.String("digest", "", "Image digest (required)")
+	regionPtr := flag.String("region", "", "AWS region (required)")
+	accountPtr := flag.String("account", "", "AWS account ID (required)")
+	
+	// Define custom usage message
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: soci-wrapper --repo REPOSITORY_NAME --digest IMAGE_DIGEST --region AWS_REGION --account AWS_ACCOUNT\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+	}
+
+	// Parse flags
+	flag.Parse()
+
+	// Validate required flags
+	if *repoPtr == "" || *digestPtr == "" || *regionPtr == "" || *accountPtr == "" {
+		fmt.Println("Error: All arguments are required")
+		flag.Usage()
 		os.Exit(1)
 	}
-	repo := os.Args[1]
-	digest := os.Args[2]
-	region := os.Args[3]
-	account := os.Args[4]
-	process(context.TODO(), repo, digest, region, account)
+
+	process(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr)
 }
