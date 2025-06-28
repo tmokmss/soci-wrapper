@@ -36,12 +36,6 @@ For SOCI V2 index:
 soci-wrapper --repo my-repo --digest sha256:abc123... --region us-west-2 --account 123456789012 --soci-version V2 --output-tag my-soci-index
 ```
 
-Sometimes (depending on AWS credential configuration) you will also have to set `AWS_REGION` environment variable:
-
-```sh
-export AWS_REGION=us-west-2 # the region your ECR repository is located at
-```
-
 ## Build
 To build this project, you must install [all the dependencies](https://github.com/awslabs/soci-snapshotter/blob/main/docs/build.md#dependencies) of soci-snapshotter.
 
