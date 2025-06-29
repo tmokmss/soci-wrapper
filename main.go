@@ -287,9 +287,15 @@ func main() {
 	}
 
 	// Call appropriate process function based on version
+	var err error
 	if *sociIndexVersionPtr == "V2" {
-		processV2(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr, *outputTagPtr)
+		_, err = processV2(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr, *outputTagPtr)
 	} else {
-		processV1(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr)
+		_, err = processV1(context.TODO(), *repoPtr, *digestPtr, *regionPtr, *accountPtr)
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
