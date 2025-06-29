@@ -6,7 +6,7 @@ toolchain go1.23.10
 
 require (
 	github.com/aws/aws-sdk-go v1.50.18
-	github.com/awslabs/soci-snapshotter v0.0.0-20250501204808-528b46ae1327
+	github.com/awslabs/soci-snapshotter v0.10.0
 	github.com/containerd/containerd v1.7.27
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rs/zerolog v1.32.0
@@ -53,6 +53,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/opencontainers/selinux v1.12.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
