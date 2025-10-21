@@ -27,8 +27,8 @@ jobs:
           go-version: stable
       - name: Set up dependencies
         run: |
-          apt update -y
-          apt install -y zlib1g-dev
+          sudo apt update -y
+          sudo apt install -y zlib1g-dev
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
