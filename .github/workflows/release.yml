@@ -1,22 +1,41 @@
-name: Release
+# .github/workflows/release.yml
+name: goreleaser
 
 on:
-  release:
-    types: [created]
+  push:
+    # run only against tags
+    tags:
+      - "*"
 
 permissions:
-    contents: write
-    packages: write
+  contents: write
+  # packages: write
+  # issues: write
+  # id-token: write
 
 jobs:
-  release-linux-amd64:
-    name: release linux/amd64
+  goreleaser:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: wangyoucao577/go-release-action@v1
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        goos: linux
-        goarch: amd64
-        pre_command: apt update -y && apt install -y zlib1g-dev
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Set up dependencies
+        run: |
+          apt update -y
+          apt install -y zlib1g-dev
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          # either 'goreleaser' (default) or 'goreleaser-pro'
+          distribution: goreleaser
+          # 'latest', 'nightly', or a semver
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
