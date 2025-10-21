@@ -22,7 +22,7 @@ builds:
 
 archives:
   - formats: [tar.gz]
-    name_template: {{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}
+    name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
 
 changelog:
   sort: asc
